@@ -53,6 +53,10 @@ https://www.youtube.com/watch?v=cSFWlF96Sds&t=2155s
 - **샤딩이 쉽지 않음**
   - 샤딩하려 해도 unique index 같은 기능을 쓰고 있으면 sharded cluster로 바로 갈 수 없고, 먼저 그런 기능을 제거해야 함.
   - master/slave → sharded cluster로 가는 운영 부담·복잡도도 큼.
+  - 보충 설명 (발표 내용이 아니라 MongoDB 동작에 대한 일반 지식이며, 자막에는 이유까지 나오지 않음)
+    - **unique index가 걸림돌인 이유**: 샤딩하면 데이터가 여러 샤드에 나뉘어 저장되는데, MongoDB의 unique index는 샤드 키를 포함할 때만 보장됨. 샤드 키가 아닌 필드(예: 샤드 키가 `user_id`인데 `email`에 unique)는 서로 다른 샤드에 같은 값이 들어가도 막을 수 없음. 그래서 샤딩 전에 그런 인덱스를 없애고 유일성을 애플리케이션에서 보장하도록 바꿔야 함.
+    - **운영 부담이 커지는 이유**: master/slave는 서버 한 대(와 복제본)만 관리하면 되지만, sharded cluster는 샤드, 라우터(mongos), config 서버가 따로 필요함. 샤드 키 선정, 데이터 재분배(balancing), 장애 대응 절차까지 새로 설계해야 함.
+    - 결과적으로 Lyft는 이 비용을 치르는 대신 처음부터 수평 확장되는 Redis(Nutcracker)로 옮기는 쪽을 택함.
 - **어려운 리팩터링**
   - 서비스가 몇 년 지나면서 추상화가 무너지고 인터페이스가 더 이상 좋지 않음. 코드가 얽혀(spaghetti) 있어 location 모델 같은 것을 크게 바꾸기 어려움.
 - **region boundary 문제**
@@ -127,16 +131,19 @@ https://www.youtube.com/watch?v=cSFWlF96Sds&t=2155s
 - 슬라이드의 코드
   ```python
   # before: hash per region
+  # region 하나가 hash 키 하나 → 필드(운전자) 단위 만료가 안 돼서 유령 운전자가 남음
   pipeline.hset(region_name, user_id, location)
 
   # after: hash per region per 30 seconds
+  # 현재 시각을 30초 단위로 내림 (예: 12:00:47 → 12:00:30)
   bucket = now_seconds() - (now_seconds() % 30)
+  # 키에 시간 버킷을 붙임 (예: 'SFO_1700000030')
   hash_key = '{}_{}'.format(region_name, bucket)
   pipeline.hset(hash_key, user_id, location)
-  pipeline.expire(hash_key, 15)
+  # 키 전체에 TTL을 걸어 오래된 버킷이 통째로 사라지게 함
+  pipeline.expire(hash_key, 30)
   ```
   - 버킷은 12:00:00, 12:00:30, 12:01:00, ... 처럼 30초 단위.
-  - 슬라이드의 `expire`는 **15초**로 적혀 있음. 발표자는 "30초 후 쓸모가 없어지면 expire"라고 설명했는데 둘이 다르므로 슬라이드 값을 따로 기록해 둠(어느 쪽이 정확한지는 미확인).
   - 슬라이드 경고문: 현재 버킷과 이전·다음 버킷을 `HGETALL`해 clock drift와 경계 조건을 처리하고, 프로세스 안에서 merge.
 - 간단한 공식으로 30초 버킷을 만들어 데이터를 쓰고, 쓸모가 없어지면 키째로 expire.
 - 보완 처리 (업데이트가 5초 간격)
@@ -144,6 +151,18 @@ https://www.youtube.com/watch?v=cSFWlF96Sds&t=2155s
   - 29초에 업데이트하고 2초 뒤에 현재 버킷을 읽으면 데이터가 이전 버킷에 있음 → **이전 버킷도 읽음**.
   - 따라서 이전/현재/다음 3개 버킷에 `HGETALL`하여 프로세스 안에서 병합(merge)함.
 - 약 1년은 잘 동작함.
+- 시간 버킷으로 얻는 점 (보충 설명: 필드 단위 TTL이 없다는 것은 발표 내용이고, 아래 1~3번 정리는 풀어쓴 해석)
+  - 기존 방식(region별 hash 하나)의 문제
+    - 로그아웃은 `HDEL`로 지우면 되지만, 배터리가 꺼지거나 앱이 죽어 신호가 끊기면 아무도 지워 주지 않음 → `HGETALL` 때 비활성 운전자(유령 운전자)까지 읽힘.
+    - `HDEL`을 대신할 청소 프로세스(Reaper)는 복잡도가 큼.
+    - 필드 단위 TTL이 없어서 "30초간 신호 없으면 자동 삭제"를 설정할 수 없음.
+  - 시간 버킷의 이점
+    1. **자동 정리**: 키 이름에 시간이 들어 있으니(`SFO_12:00:30`) 버킷 키를 통째로 `EXPIRE`하면 끝. 청소 프로세스가 필요 없음.
+    2. **유령 운전자 차단**: 신호가 끊긴 운전자는 새 버킷에 쓰이지 않으므로, 오래된 버킷이 만료되는 순간 조회 대상에서 자연스럽게 빠짐.
+    3. **범위가 시간으로 한정**: 읽을 때 이전·현재·다음 3개 버킷만 보면 되므로 "최근 데이터만" 읽는다는 보장이 생김.
+  - 대가
+    - clock drift와 경계 문제 때문에 3개 버킷을 읽고 병합해야 함.
+    - 이후 한계로 대량 만료가 Redis를 블록하는 문제와 hot shard 문제(region이 키)가 드러나 geohash + sorted set으로 바꿈 (→ 1.8, 1.11).
 
 ### 1.8 Growing pains
 
@@ -203,16 +222,26 @@ https://www.youtube.com/watch?v=cSFWlF96Sds&t=2155s
   - 그 크기에 들어갈 수 있는 차 수는 물리적 한계가 있어서, geohash가 비어 있든 가득 차 있든 편차가 hot shard를 만들 정도로 크지 않음.
 - 슬라이드의 코드
   ```python
+  # 운전자가 5초마다 보내는 위치 (ride_id가 None이면 아직 배차되지 않은 상태)
   loc = {'lat': 23.2, 'lng': -122.3, 'ride_id': None}
+  # 위치를 level 5 지오해시 셀로 변환 (도시 블록 6~7개 크기)
   geohash = compute_geohash(loc['lat'], loc['lng'], level=5)
 
+  # 아래 명령들을 pipeline 하나로 묶어 nutcracker에 보냄 (키별로 알맞은 샤드로 분배됨)
   with nutcracker.pipeline() as pipeline:
       # string per user
+      # ① 정확한 위치 저장: 키=user_id, 값=위치 JSON. 위치의 단일 진실 원천
+      #    ("배정된 내 운전자 어디야?" 같은 user_id 조회용)
       pipeline.set(user_id, json.dumps(loc))
 
       # sorted set per geohash with last timestamp
+      # ② 주변 검색용 인덱스는 운전 가능 상태(driver_mode)인 사용자만 등록
       if driver_mode is True:
+          # 키=지오해시 셀, 멤버=user_id, score=마지막 보고 시각(초)
+          # 같은 운전자가 다시 쓰면 score만 갱신됨 (실제 Redis 명령은 ZADD)
           pipeline.zset(geohash, user_id, now_seconds())
+          # ③ score가 (현재 - 30초)보다 작은 멤버 = 30초 넘게 신호 없는 운전자를 셀에서 삭제
+          #    멤버 단위 TTL이 없으므로 쓸 때마다 같은 셀을 정리하는 방식으로 만료 처리
           pipeline.zremrangebyscore(geohash, -inf, now_seconds() - 30)  # expire!
   ```
   - 슬라이드 경고문: *Sorted set tells you where a driver might be. Use string as source of truth. On query, look in neighboring geohashes based on desired radius.*
@@ -236,6 +265,11 @@ https://www.youtube.com/watch?v=cSFWlF96Sds&t=2155s
 - point-and-radius, position-of-key 의미론은 Lyft 방식과 비슷하고, 내부적으로 geohash + sorted set을 사용하므로 구현이 크게 다르지는 않음.
 - 하지만 부족한 점
   - **expiration, sharding 없음**
+    - 보충 설명 (발표 내용이 아니라 풀어쓴 해석이며 2017년 발표 시점 기준. 현재 Redis GEO에 만료·샤딩이 추가됐는지는 미확인)
+    - GEO가 샤딩이 안 되는 이유: GEO는 하나의 키(sorted set 하나)에 모든 위치를 담고, Redis에서 키 하나는 한 서버에만 있으므로 쪼갤 수 없음. 데이터가 커지거나 읽기가 몰리면 그 서버가 병목이 됨.
+    - Lyft 방식에서 샤딩이 되는 이유: 지오해시 셀마다 sorted set을 따로 두고(키 = 지오해시 셀), Nutcracker가 키를 해싱(ketama)해 여러 샤드로 분산함. 반경 검색은 필요한 셀들을 각 샤드에서 읽어 모음(scatter-gather).
+    - hot shard 방지: level 5 셀은 크기가 고정이고 들어갈 차 수에 물리적 한계가 있어 셀별 데이터 편차가 작음. region 단위일 때의 편차(샌프란시스코 vs 코퍼스 크리스티)가 사라져 샤드 분산이 고름.
+    - 정리: "Lyft가 sharded GEO를 구현했다"가 아니라, **GEO를 쓰지 않고 키 설계(지오해시별 sorted set) + Nutcracker로 샤딩을 얻었다**가 정확함.
   - **메타데이터 저장 불가**: 예컨대 파란 차가 업데이트됐을 때 "파란 차"로 바로 조회할 수 없고 전체 키로 찾아야 함. 메타데이터를 저장할 수 없어서 옛 레코드를 지우고 새 레코드를 써야 함.
 - 평가: GEO는 프로토타이핑에 좋음. Haversine 공식이나 geohashing을 몰라도 DB가 알아서 해 줌. 작고 정적인 데이터셋이나 durable Redis에서는 쓸 만할 때가 있음.
 - Lyft의 추가 복잡도
@@ -306,7 +340,6 @@ https://www.youtube.com/watch?v=cSFWlF96Sds&t=2155s
 
 ### 3.2 Envoy
 
-- 슬라이드 "What is Envoy?": *Open-source C++11 service mesh and edge proxy.* 고급 로드 밸런서로서 제공하는 기능은 service discovery integration / retry, circuit breaking, rate limiting / consistent hashing / active health checks / stats, stats, stats / tracing / outlier detection, fault injection. 마지막 줄: *Envoy was designed to be extensible!*
 - Lyft가 만든 오픈소스 **C++ 서비스 메시 + 엣지 프록시**. Lyft 내부에서 ELB, Nginx, HAProxy를 대체했고 엣지 통신과 서비스 간 통신을 모두 처리함.
 - 고급 로드 밸런서로서의 기능
   - service discovery 연동
