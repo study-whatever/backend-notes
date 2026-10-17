@@ -6,3 +6,4 @@
 - [인증/인가 공부하기](auth.md) — 세션 vs JWT, OAuth 2.0, Refresh Token, PKCE
 - [동시성](concurrency.md) — 멱등성(Stripe), Redis 분산 락(Redlock), LangGraph Double-texting, 대화형 에이전트의 그래프 실행 락 사례
 - [Agent Memory](agent-memory.md) — LangGraph 단기/장기 기억과 Store, AgentCore 장기 메모리, LangMem, 인지 아키텍처(CoALA) 논문 정리
+- [근접성 서비스](proximity-service.md) — 주변 식당 검색 설계: 지오해시 vs 쿼드트리, S2, 샤딩/레플리카, 캐시 전략
