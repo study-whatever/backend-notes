@@ -8,3 +8,4 @@
 - [Agent Memory](agent-memory.md) — LangGraph 단기/장기 기억과 Store, AgentCore 장기 메모리, LangMem, 인지 아키텍처(CoALA) 논문 정리
 - [근접성 서비스](proximity-service.md) — 주변 식당 검색 설계: 지오해시 vs 쿼드트리, S2, 샤딩/레플리카, 캐시 전략
 - [Lyft Redis Geospatial](lyft-redis-geospatial.md) — RedisConf17 Lyft 발표 정리: Nutcracker 샤딩, geohash 데이터 모델, Envoy Redis
+- [주변 친구](nearby-friends.md) — 친구 위치 공유 설계: 웹소켓 + 레디스 Pub/Sub, 메시지 시스템 비교, 해시 링 기반 Pub/Sub 클러스터 샤딩, 지오해시 채널
