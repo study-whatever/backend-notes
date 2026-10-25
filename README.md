@@ -4,6 +4,7 @@
 
 - [Kafka KRaft와 ZooKeeper](kafka-kraft-zookeeper.md) — KRaft 도입 배경, 컨트롤러 쿼럼, Kafka 버전별 차이
 - [분산 메시지 큐](distributed-message-queue.md) — 대규모 메시지 큐 설계, Kafka 구현 방식, 복제와 전달 보장, 학습 Q&A
+- [AWS SQS](aws-sqs.md) — Standard와 FIFO, 메시지 생명주기, 멱등성, 운영 지표, Kafka와의 선택 기준
 - [Kafka](kafka.md) — Apache Kafka 설계 정리 (저장 구조, Topic/Partition, 복제 등)
 - [인증/인가 공부하기](auth.md) — 세션 vs JWT, OAuth 2.0, Refresh Token, PKCE
 - [동시성](concurrency.md) — 멱등성(Stripe), Redis 분산 락(Redlock), LangGraph Double-texting, 대화형 에이전트의 그래프 실행 락 사례
