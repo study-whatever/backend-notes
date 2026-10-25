@@ -330,3 +330,12 @@ flowchart LR
 - [Apache Kafka 공식 문서](https://kafka.apache.org/documentation/)
 
 *주: 실제 리전별 SQS API 할당량, 요금, Kafka 배포 방식은 환경과 시기에 따라 달라질 수 있으므로 설계·비용 산정 전에 공식 문서를 재확인해야 한다.*
+
+## 추가로 알아둘 운영 포인트
+
+- **재수신마다 달라지는 `ReceiptHandle`:** `MessageId`는 메시지 식별자이고, 삭제와 Visibility Timeout 변경에는 수신 때 받은 `ReceiptHandle`을 쓴다. 같은 메시지를 다시 받으면 새 Handle이 발급되므로 삭제 시 가장 최근 Handle을 사용한다. [AWS: 큐와 메시지 식별자](https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/sqs-queue-message-identifiers.html)
+- **Batch의 부분 실패:** `SendMessageBatch`와 `DeleteMessageBatch`는 HTTP 200으로 응답해도 항목별 실패가 섞일 수 있다. 응답의 성공·실패 항목을 확인하고 실패한 항목만 재시도한다. [AWS: SendMessageBatch](https://docs.aws.amazon.com/AWSSimpleQueueService/latest/APIReference/API_SendMessageBatch.html), [AWS: DeleteMessageBatch](https://docs.aws.amazon.com/AWSSimpleQueueService/latest/APIReference/API_DeleteMessageBatch.html)
+- **긴 작업의 Visibility Timeout:** 처리 시간을 예측하기 어렵다면 Worker가 살아 있는 동안 `ChangeMessageVisibility`로 주기적으로 연장할 수 있다. 다만 최초 `ReceiveMessage` 요청부터 최대 12시간이며, 연장해도 이 상한은 초기화되지 않는다. [AWS: 적시에 메시지 처리하기](https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/best-practices-processing-messages-timely-manner.html)
+- **DLQ 보관 기간:** Standard 큐의 메시지가 DLQ로 이동해도 원래 발행 시각을 기준으로 보관 기간을 계산한다. 따라서 DLQ의 보관 기간은 원본 큐보다 길게 설정하는 것이 권장된다. FIFO 큐는 DLQ 이동 시 발행 시각이 새로 설정된다. [AWS: DLQ 사용](https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/sqs-dead-letter-queues.html)
+- **메시지 크기:** SQS 메시지의 최대 크기는 1 MiB다. 큰 Payload는 S3에 저장하고 큐에는 참조를 담는 방식을 검토한다. [AWS: 메시지 할당량](https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/quotas-messages.html), [AWS: 큰 메시지 관리](https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/sqs-managing-large-messages.html)
+- **접근 제어와 암호화:** Producer에는 발행 권한, Consumer에는 수신·삭제 권한만 부여하는 식으로 최소 권한을 적용한다. 큐의 공개 접근을 막고, 저장 시 암호화와 HTTPS 전송을 확인한다. 필요한 경우 VPC Endpoint와 큐 정책으로 접근 경로를 제한한다. [AWS: SQS 보안 모범 사례](https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/sqs-security-best-practices.html)
