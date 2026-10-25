@@ -73,7 +73,7 @@ flowchart TB
     A -->|반복 실패 · Redrive Policy 설정 시| L[DLQ]
 ```
 
-- 수신 시 **ReceiptHandle**을 받아 해당 메시지를 삭제할 때 사용한다.
+- **`MessageId`와 `ReceiptHandle`:** `MessageId`는 메시지 자체의 ID이고, `ReceiptHandle`은 **이번 수신**에 붙는 토큰이다. 같은 메시지를 다시 받으면 새 Handle이 발급되므로 `DeleteMessage`나 `ChangeMessageVisibility`에는 가장 최근에 받은 값을 사용한다. Handle을 받는 것만으로 작업이 완료되거나 메시지가 삭제되는 것은 아니다. [AWS: 큐와 메시지 식별자](https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/sqs-queue-message-identifiers.html)
 - Kafka와 달리 사용자가 Offset을 관리하지 않는다. 메시지는 성공 처리 후 삭제하는 작업 큐 구조다.
 - SQS는 다중 AZ 기반의 내구성과 가용성을 제공하지만, 내부 저장 토폴로지나 Replica 수는 공개 운영 설정이 아니다.
 - **Kafka의 Partition ≠ SQS의 Message Group**: Partition은 로그 저장·할당 단위, Message Group은 FIFO 메시지의 순서·동시성 제어를 위한 논리적 키다. FIFO 내부 Partition은 AWS가 관리한다.
@@ -333,7 +333,6 @@ flowchart LR
 
 ## 추가로 알아둘 운영 포인트
 
-- **재수신마다 달라지는 `ReceiptHandle`:** `MessageId`는 메시지 식별자이고, 삭제와 Visibility Timeout 변경에는 수신 때 받은 `ReceiptHandle`을 쓴다. 같은 메시지를 다시 받으면 새 Handle이 발급되므로 삭제 시 가장 최근 Handle을 사용한다. [AWS: 큐와 메시지 식별자](https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/sqs-queue-message-identifiers.html)
 - **Batch의 부분 실패:** `SendMessageBatch`와 `DeleteMessageBatch`는 HTTP 200으로 응답해도 항목별 실패가 섞일 수 있다. 응답의 성공·실패 항목을 확인하고 실패한 항목만 재시도한다. [AWS: SendMessageBatch](https://docs.aws.amazon.com/AWSSimpleQueueService/latest/APIReference/API_SendMessageBatch.html), [AWS: DeleteMessageBatch](https://docs.aws.amazon.com/AWSSimpleQueueService/latest/APIReference/API_DeleteMessageBatch.html)
 - **긴 작업의 Visibility Timeout:** 처리 시간을 예측하기 어렵다면 Worker가 살아 있는 동안 `ChangeMessageVisibility`로 주기적으로 연장할 수 있다. 다만 최초 `ReceiveMessage` 요청부터 최대 12시간이며, 연장해도 이 상한은 초기화되지 않는다. [AWS: 적시에 메시지 처리하기](https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/best-practices-processing-messages-timely-manner.html)
 - **DLQ 보관 기간:** Standard 큐의 메시지가 DLQ로 이동해도 원래 발행 시각을 기준으로 보관 기간을 계산한다. 따라서 DLQ의 보관 기간은 원본 큐보다 길게 설정하는 것이 권장된다. FIFO 큐는 DLQ 이동 시 발행 시각이 새로 설정된다. [AWS: DLQ 사용](https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/sqs-dead-letter-queues.html)
