@@ -13,3 +13,4 @@
 - [Lyft Redis Geospatial](lyft-redis-geospatial.md) — RedisConf17 Lyft 발표 정리: Nutcracker 샤딩, geohash 데이터 모델, Envoy Redis
 - [주변 친구](nearby-friends.md) — 친구 위치 공유 설계: 웹소켓 + 레디스 Pub/Sub, 메시지 시스템 비교, 해시 링 기반 Pub/Sub 클러스터 샤딩, 지오해시 채널
 - [지표 모니터링 및 경보 시스템](metrics-monitoring-alerting.md) — 시계열 DB 선택, 풀 vs 푸시 수집과 서비스 디스커버리, Kafka 기반 전송 파이프라인, 집계 지점, 저장 용량 최적화, 경보 시스템
+- [Pull doesn't scale - or does it?](pull-doesnt-scale.md) — Prometheus 풀 방식 확장성 오해 정리, DigitalOcean 사례의 풀/푸시 수집, Pushgateway 사용 기준, Nagios·Datadog Q&A
