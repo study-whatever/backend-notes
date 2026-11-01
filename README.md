@@ -12,3 +12,4 @@
 - [근접성 서비스](proximity-service.md) — 주변 식당 검색 설계: 지오해시 vs 쿼드트리, S2, 샤딩/레플리카, 캐시 전략
 - [Lyft Redis Geospatial](lyft-redis-geospatial.md) — RedisConf17 Lyft 발표 정리: Nutcracker 샤딩, geohash 데이터 모델, Envoy Redis
 - [주변 친구](nearby-friends.md) — 친구 위치 공유 설계: 웹소켓 + 레디스 Pub/Sub, 메시지 시스템 비교, 해시 링 기반 Pub/Sub 클러스터 샤딩, 지오해시 채널
+- [지표 모니터링 및 경보 시스템](metrics-monitoring-alerting.md) — 시계열 DB 선택, 풀 vs 푸시 수집과 서비스 디스커버리, Kafka 기반 전송 파이프라인, 집계 지점, 저장 용량 최적화, 경보 시스템
