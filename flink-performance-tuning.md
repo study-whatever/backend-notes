@@ -285,6 +285,32 @@ GROUP BY day
 
 옵티마이저가 "같은 distinct 키에 필터만 다르다"는 것을 알아보고, **세 개의 상태 대신 하나의 공유 상태**를 씁니다. 상태 접근과 상태 크기가 줄어듭니다. 별도 설정 없이 쿼리만 바꾸면 됩니다.
 
+> **Q. 왜 FILTER로 쓰면 상태를 공유할 수 있을까?**
+>
+> `COUNT(DISTINCT x)`를 하려면 Flink는 "이미 본 x 값"을 상태(map)에 저장해 둬야 합니다. 그래야 같은 값이 다시 와도 한 번만 셉니다. 핵심은 **옵티마이저가 무엇을 distinct 키로 보느냐**입니다.
+>
+> **CASE WHEN으로 쓰면: distinct 키가 3개**
+>
+> - `user_id`
+> - `CASE WHEN flag IN ('android','iphone') THEN user_id ELSE NULL END`
+> - `CASE WHEN flag IN ('wap','other') THEN user_id ELSE NULL END`
+>
+> 사람 눈에는 셋 다 결국 `user_id`지만, 옵티마이저에게는 **서로 다른 식(expression)** 입니다. 그래서 distinct 상태를 3벌 따로 만듭니다. 앱에서 접속한 사용자 `u1`이 오면 `total` map과 `app` map 두 곳에 `u1`이 저장되고, 레코드 하나마다 map 3개를 각각 조회·갱신합니다.
+>
+> **FILTER로 쓰면: distinct 키가 1개**
+>
+> 세 집계 모두 distinct 대상이 똑같이 `user_id`이고, 다른 것은 "어떤 행을 셀지" 고르는 필터 조건뿐입니다. 옵티마이저가 이를 알아보고 `user_id`를 키로 하는 **map 하나**를 만듭니다. 각 `user_id`에는 "어느 집계(total / app / web)에서 봤는지"를 나타내는 작은 표시만 값으로 붙여 둡니다.
+>
+> | | CASE WHEN | FILTER |
+> |---|---|---|
+> | distinct 상태 | map 3개 | map 1개 |
+> | `u1`(앱 사용자) 저장 | `total`, `app` map에 각각 1번씩, 총 2번 | `u1` 한 번 + "total, app에서 봄" 표시 |
+> | 레코드당 상태 접근 | 3번 | 1번 |
+>
+> 사용자가 많을수록 같은 `user_id`가 여러 map에 중복 저장되는 양이 커지므로, map 하나로 합치면 상태 크기와 접근 횟수가 함께 줄어듭니다.
+>
+> 결과는 두 쿼리가 같습니다. `COUNT(DISTINCT)`는 NULL을 세지 않기 때문입니다. 다만 옵티마이저가 CASE WHEN 식을 FILTER 형태로 자동으로 바꿔 주지는 않으므로, 쿼리를 FILTER로 직접 써야 이 최적화가 적용됩니다.
+
 ### MiniBatch Regular Joins
 
 **문제**: 기본 Regular Join도 레코드를 하나씩 처리합니다. 상대편 상태를 조회하고, 자기 상태를 갱신하고, 결과를 내보냅니다. 상태 접근 부담이 크고, Join이 여러 단계로 이어지면 중간 결과가 불어나는(record amplification) 문제가 있습니다.
