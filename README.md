@@ -15,3 +15,4 @@
 - [지표 모니터링 및 경보 시스템](metrics-monitoring-alerting.md) — 시계열 DB 선택, 풀 vs 푸시 수집과 서비스 디스커버리, Kafka 기반 전송 파이프라인, 집계 지점, 저장 용량 최적화, 경보 시스템
 - [Pull doesn't scale - or does it?](pull-doesnt-scale.md) — Prometheus 풀 방식 확장성 오해 정리, DigitalOcean 사례의 풀/푸시 수집, Pushgateway 사용 기준, Nagios·Datadog Q&A
 - [광고 클릭 이벤트 집계](ad-click-event-aggregation.md) — RTB 클릭 집계 설계: 원시/집계 데이터 모델과 필터, 맵리듀스 집계 서비스, 카파 아키텍처와 재계산, 이벤트 시각·워터마크·윈도, exactly-once 오프셋 처리, 핫스팟, 조정
+- [Apache Flink 개념과 성능 튜닝](flink-performance-tuning.md) — Flink 핵심 개념(상태, 워터마크, 체크포인트)과 용도, 광고 클릭 집계와의 연결, Table/SQL 성능 튜닝(MiniBatch, Local-Global, Split Distinct, MultiJoin, Delta Join)
