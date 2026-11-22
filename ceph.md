@@ -171,6 +171,42 @@ sequenceDiagram
 	- `degraded`: 복제본 수가 부족함 (OSD 장애 직후)
 	- `recovering` / `backfilling`: 복제본을 다시 채우는 중
 
+**CRUSH가 하는 일** ([CRUSH Maps](https://docs.ceph.com/en/latest/rados/operations/crush-map/))
+
+- CRUSH는 "이 PG를 어느 OSD들에 둘까"를 계산하는 알고리즘이다. 위치를 어딘가에 적어 두고 찾아보는 방식이 아니라, 그때그때 계산해서 정한다.
+- 계산에 쓰는 재료는 세 가지다.
+	- PG 번호 (예: `4.58`)
+	- CRUSH Map: 어떤 OSD가 어느 서버·랙에 있고, 각 OSD가 얼마나 큰지
+	- 규칙(rule): 복제본을 어떤 기준으로 흩어 놓을지
+- 같은 맵과 규칙을 가진 클라이언트라면 누가 계산해도 결과가 같다. 그래서 위치를 물어볼 중앙 서버 없이 [클라이언트가 OSD와 바로 통신한다](https://docs.ceph.com/en/latest/rados/operations/crush-map/).
+- 결과는 무작위처럼 고르게 흩어지지만 매번 같은 값이 나오는 계산이다 (문서 표현으로는 pseudo-random).
+
+**가중치(weight)**
+
+- OSD마다 가중치가 있고, [보통 디스크 용량(TiB)을 그대로 쓴다](https://docs.ceph.com/en/latest/rados/operations/crush-map/). OSD를 만들 때 자동으로 들어간다.
+- 가중치가 큰 OSD일수록 PG를 더 많이 받는다. 4TB와 8TB 디스크가 섞여 있으면 8TB 쪽이 약 2배를 받아서, 두 디스크가 비슷한 비율로 찬다.
+- [기본 버킷 방식인 `straw2`는 가중치가 바뀐 OSD와 관련된 PG만 옮긴다](https://docs.ceph.com/en/latest/rados/operations/crush-map/). 디스크 하나를 바꿔도 클러스터 전체가 뒤섞이지 않는다.
+
+**규칙(rule)과 디바이스 클래스**
+
+- pool마다 어떤 규칙을 쓸지 정한다. 복제 규칙은 대략 이런 모양이다.
+
+```
+step take default                    # default 트리의 꼭대기에서 시작해서
+step chooseleaf firstn 0 type host   # 서로 다른 host를 복제 수만큼 고르고, 각 host에서 OSD 하나씩
+step emit                            # 그 OSD 목록을 결과로 낸다
+```
+
+- [OSD는 시작할 때 디스크 종류에 따라 `hdd`, `ssd`, `nvme` 클래스가 자동으로 붙는다](https://docs.ceph.com/en/latest/rados/operations/crush-map/). 규칙에서 클래스를 지정하면 특정 pool을 SSD에만 둘 수 있다.
+
+```bash
+ceph osd crush rule create-replicated fast-rule default host ssd   # SSD만 쓰고, host 단위로 흩는 규칙
+ceph osd pool set my-pool crush_rule fast-rule                      # my-pool에 그 규칙 적용
+```
+
+- RGW의 storage class(1-5)도 이런 식으로 "SSD pool", "HDD pool"을 나눠 두고 연결하는 경우가 많다.
+- [primary affinity](https://docs.ceph.com/en/latest/rados/operations/crush-map/)로 특정 OSD가 primary로 뽑힐 확률을 낮출 수 있다 (0이면 primary가 되지 않음, 기본 1). 느린 디스크에 쓰기 요청이 몰리지 않게 할 때 쓴다.
+
 **CRUSH와 장애 도메인**
 
 ![ceph-crush-failure-domain](images/ceph/ceph-crush-failure-domain.png)
