@@ -17,3 +17,4 @@
 - [광고 클릭 이벤트 집계](ad-click-event-aggregation.md) — RTB 클릭 집계 설계: 원시/집계 데이터 모델과 필터, 맵리듀스 집계 서비스, 카파 아키텍처와 재계산, 이벤트 시각·워터마크·윈도, exactly-once 오프셋 처리, 핫스팟, 조정
 - [Apache Flink 개념과 성능 튜닝](flink-performance-tuning.md) — Flink 핵심 개념(상태, 워터마크, 체크포인트)과 용도, 광고 클릭 집계와의 연결, Table/SQL 성능 튜닝(MiniBatch, Local-Global, Split Distinct, MultiJoin, Delta Join)
 - [Change Data Capture](change-data-capture.md) — Oracle9i CDC: publish/subscribe 모델, 동기 캡처 구성 요소, change table control column, 구독 절차와 subscription window, purge·export/import 주의사항
+- [Ceph](ceph.md) — AWS에서 Ceph로 옮길 때 알아야 할 것: RADOS 구조(PG·CRUSH·MON/Paxos·복구·용량 한도·복제와 EC), RGW(S3) 연결·권한·멀티테넌시·라이프사이클·리샤딩·알림·멀티사이트, RBD(EBS), CephFS(EFS), Ceph-CSI, AWS 대비 달라지는 점
